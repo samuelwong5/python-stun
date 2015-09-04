@@ -134,11 +134,13 @@ def encode_message_header(type, size, t_id_1, t_id_2):
     return attr
   
 def decode_message_header(attr):
-    return struct.unpack('!HHQQ', stun_header)
+    return struct.unpack('!HHQQ', attr)
 
     
 # STUN Attribute Header    
 def encode_attribute_header(type, attr_value):
+    print(type)
+    print(attr_value)
     return struct.pack('!HH', type, len(attr_value))
 
 def decode_attribute_header(attr):
