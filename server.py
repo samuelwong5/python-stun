@@ -66,9 +66,9 @@ def ip_int_to_string(ip):
 # REFLECTED-FROM indicates IP address and port where the request came from (trace; prevent DDoS)
 IP_FAMILY = 0x1 # Always 0x01 (IPv4) according to RFC3489  
 
-def encode_mapped_address(ip, port):
+def encode_mapped_address(ip, port, type=ATTR_MAPPED_ADDRESS):
     attr = struct.pack('!xBHI', IP_FAMILY, port, ip_string_to_int(ip))
-    return attr
+    return encode_attribute_header(type, attr) + attr
     
 def decode_mapped_address(attr):
     ip_family, port, ip_int = b.unpack('!xBHI', attr)
@@ -86,7 +86,7 @@ def encode_change_request(change_ip, change_port):
     if change_port:
         flags &= CHANGE_PORT
     attr = struct.pack('!I', flags)
-    return attr
+    return encode_attribute_header(ATTR_CHANGE_REQUEST, attr) + attr
     
 def decode_change_request(attr):
     flags = struct.unpack('!I', attr)
@@ -109,7 +109,7 @@ def encode_error_code(err):
     err_class = err_code / 100
     err_numbr = err_code % 100
     attr = struct.pack('!xxBBI', err_class, err_number, err_msg)
-    return attr
+    return encode_attribute_header(ATTR_ERROR_CODE, attr) + attr
  
 def decode_error_code(attr):
     err_class, err_numbr, err_msg = struct.unpack('!xxBBI', attr)
@@ -126,7 +126,7 @@ def encode_unknown_attributes(attr_list):
         attr += struct.pack('!H', attr_list[1])    
     if len(attr_list) % 2 == 1: # Repeat a value if odd number of unknown attributes
         attr += struct.pack('!H', attr_list[0])
-    return atr
+    return encode_attribute_header(ATTR_UNKNOWN_ATTRIBUTES, attr) + attr
     
 def decode_unknown_attributes(attr):
     return struct.unpack('!' + ('H' * len(attr) / 2), attr)
@@ -134,10 +134,13 @@ def decode_unknown_attributes(attr):
 
 # STUN Message Header
 def encode_message_header(type, size, t_id_1, t_id_2):
-
+    attr = struct.pack('!HHQQ', type, size, t_id_1, t_id_2)
+    return attr
+  
 def decode_message_header(attr):
     return struct.unpack('!HHQQ', stun_header)
 
+    
 # STUN Attribute Header    
 def encode_attribute_header(type, attr_value):
     return struct.pack('!HH', type, len(attr_value))
@@ -159,10 +162,12 @@ def stun_request_handler():
             attr_type, attr_size = decode_attribute_header(attr_header)
             attr_value = conn.recv(attr_size)
             unknown_attr = []
+            response_addr = None
             if attr_type == ATTR_RESPONSE_ADDRESS:
                 response_addr = decode_mapped_address(attr_value)
             elif attr_type == ATTR_CHANGE_REQUEST:
                 change_flags = decode_change_request(attr_value)
+                # Not implemented
             elif attr_type == ATTR_USERNAME:
                 pass # TODO
             elif attr_type == ATTR_PASSWORD:
@@ -171,7 +176,22 @@ def stun_request_handler():
                 pass # TODO
             elif attr_type <= 0x7fff:
                 unknown_attr.append(attr_type)
-        
+        if len(unknown_attr) > 0:
+            error_code = encode_error_code(ERR_UNKNOWN_ATTRIBUTE)
+            unkwn_attr = encode_unknown_attributes(unknown_attr)
+            response_payload = [error_code, unkwn_attr]
+            response_length = reduce(lambda x,y:x+len(y), respones_payload, 0)
+            response_header = encode_message_header(STUN_BINDING_ERR_RESPONSE, response_length, t_id_1, t_id_2)
+        else:
+            mapped_addr = encode_mapped_address(addr[0], addr[1])
+            source_addr = encode_mapped_address(PRIMARY_IP, PRIMARY_PORT, ATTR_SOURCE_ADDRESS)
+            changed_addr = encode_mapped_address(SECONDARY_IP, SECONDARY_PORT, ATTR_CHANGED_ADDRESS)
+            response_payload = [mapped_addr, source_addr, changed_addr]
+            response_length = reduce(lambda x,y:x+len(y), respones_payload, 0)
+            response_header = encode_message_header(STUN_BINDING_RESPONSE, response_length, t_id_1, t_id_2)
+        conn.sendall(response_header)
+        for r in response_payload:
+            conn.sendall(r)
     else if stun_type == STUN_SHARED_SECRET_REQUEST:
         # TODO: Implement shared secret
         pass
@@ -180,7 +200,11 @@ def stun_request_handler():
         pass
 
 def main():
-    pass
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((PRIMARY_IP, PRIMARY_PORT))
+    s.listen(1)
+    while True:
+        stun_request_handler()
     
 # TODO: Generate USERNAME, PASSWORD for TLS
 # username = <prefix,rounded-time,clientIP,hmac>
