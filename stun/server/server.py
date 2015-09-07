@@ -4,8 +4,8 @@ sys.path.append(os.path.abspath(".."))
 from stun import *
 
 # Server configurations
-PRIMARY_IP = '172.22.20.6'
-SECONDARY_IP = '172.22.20.7'
+PRIMARY_IP = '172.22.20.11'
+SECONDARY_IP = '172.22.20.12'
 PRIMARY_PORT = 3478
 SECONDARY_PORT = 3479
 
@@ -13,9 +13,10 @@ SECONDARY_PORT = 3479
 # Main STUN request handler
 def stun_request_handler(sock):
     conn, addr = sock.accept()
-    print('Connected to ' + addr[0] + ':' + str(addr[1]))
+    print('STUN REQUEST FROM ' + addr[0] + ':' + str(addr[1]))
     stun_header = conn.recv(STUN_HEADER_SIZE)
     stun_type, payload_size, t_id_1, t_id_2 = decode_message_header(stun_header)
+    print('TRANSACTION-ID: ' + str(t_id_1) + str(t_id_2))
     if stun_type == STUN_BINDING_REQUEST:
         unknown_attr = []
         while payload_size > 0:
@@ -24,7 +25,7 @@ def stun_request_handler(sock):
             attr_value = conn.recv(attr_size)
             response_addr = None
             if attr_type == ATTR_RESPONSE_ADDRESS:
-                response_addr = decode_mapped_address(attr_value)
+                response_addr = decode_address(attr_value)
             elif attr_type == ATTR_CHANGE_REQUEST:
                 change_flags = decode_change_request(attr_value)
                 # Not implemented
@@ -43,9 +44,9 @@ def stun_request_handler(sock):
             response_length = reduce(lambda x,y:x+len(y), response_payload, 0)
             response_header = encode_message_header(STUN_BINDING_ERR_RESPONSE, response_length, t_id_1, t_id_2)
         else:
-            mapped_addr = encode_mapped_address(addr[0], addr[1])
-            source_addr = encode_mapped_address(PRIMARY_IP, PRIMARY_PORT, ATTR_SOURCE_ADDRESS)
-            changed_addr = encode_mapped_address(SECONDARY_IP, SECONDARY_PORT, ATTR_CHANGED_ADDRESS)
+            mapped_addr = encode_address(addr[0], addr[1])
+            source_addr = encode_address(PRIMARY_IP, PRIMARY_PORT, ATTR_SOURCE_ADDRESS)
+            changed_addr = encode_address(SECONDARY_IP, SECONDARY_PORT, ATTR_CHANGED_ADDRESS)
             response_payload = [mapped_addr, source_addr, changed_addr]
             response_length = reduce(lambda x,y:x+len(y), response_payload, 0)
             response_header = encode_message_header(STUN_BINDING_RESPONSE, response_length, t_id_1, t_id_2)

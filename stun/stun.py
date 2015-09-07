@@ -30,7 +30,7 @@ STUN_HEADER_SIZE                = 20
 #   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 #   |                             Value                             ....
 #   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-ATTR_MAPPED_ADDRESS             = 0x0001
+ATTR_address             = 0x0001
 ATTR_RESPONSE_ADDRESS           = 0x0002
 ATTR_CHANGE_REQUEST             = 0x0003
 ATTR_SOURCE_ADDRESS             = 0x0004
@@ -62,14 +62,16 @@ def ip_int_to_string(ip):
 # REFLECTED-FROM indicates IP address and port where the request came from (trace; prevent DDoS)
 IP_FAMILY = 0x1 # Always 0x01 (IPv4) according to RFC3489  
 
-def encode_mapped_address(ip, port, type=ATTR_MAPPED_ADDRESS):
+def encode_address(ip, port, type=ATTR_address):
     attr = struct.pack('!xBHI', IP_FAMILY, port, ip_string_to_int(ip))
     return encode_attribute_header(type, attr) + attr
     
-def decode_mapped_address(attr):
-    ip_family, port, ip_int = b.unpack('!xBHI', attr)
+def decode_address(attr):
+    ip_family, port, ip_int = struct.unpack('!xBHI', attr)
     return ip_int_to_string(ip_int), port
 
+def print_address(name, addr):
+    print('[{0}] {1}:{2}'.format(name, addr[0], addr[1]))
     
 # CHANGE-REQUEST requests a different address and/or port when sending the response   
 CHANGE_IP = 0x4
@@ -139,9 +141,7 @@ def decode_message_header(attr):
     
 # STUN Attribute Header    
 def encode_attribute_header(type, attr_value):
-    print(type)
-    print(attr_value)
     return struct.pack('!HH', type, len(attr_value))
 
 def decode_attribute_header(attr):
-    return struct.unpack('!HH')
+    return struct.unpack('!HH', attr)
